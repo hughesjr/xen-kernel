@@ -1,0 +1,63 @@
+From c6a71c4d8a59826f9f9bd691ac99de62b6f47de2 Mon Sep 17 00:00:00 2001
+From: Sarah Newman <srn@prgmr.com>
+Date: Sun, 29 Apr 2018 16:14:09 -0700
+Subject: [PATCH] drbd: avoid use-after-free in drbd_request_endio
+
+bio_put(req->private_bio) may put the bio being passed in, after
+which point accessing bio may no longer be valid.
+
+It should be possible to duplicate the bug with the following:
+
+Compile the kernel with DEBUG_PAGEALLOC
+Start DRBD in primary mode
+
+This applies to versions before 4e4cbee93d561, first released
+in v4.13. v4.13+ has a similar bug.
+
+Signed-off-by: Sarah Newman <srn@prgmr.com>
+---
+ drivers/block/drbd/drbd_worker.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/block/drbd/drbd_worker.c b/drivers/block/drbd/drbd_worker.c
+index c6755c9..e9992b8 100644
+--- a/drivers/block/drbd/drbd_worker.c
++++ b/drivers/block/drbd/drbd_worker.c
+@@ -209,6 +209,7 @@ void drbd_request_endio(struct bio *bio)
+ 	struct drbd_device *device = req->device;
+ 	struct bio_and_error m;
+ 	enum drbd_req_event what;
++	int bi_error = bio->bi_error;
+ 
+ 	/* If this request was aborted locally before,
+ 	 * but now was completed "successfully",
+@@ -242,15 +243,15 @@ void drbd_request_endio(struct bio *bio)
+ 		if (__ratelimit(&drbd_ratelimit_state))
+ 			drbd_emerg(device, "delayed completion of aborted local request; disk-timeout may be too aggressive\n");
+ 
+-		if (!bio->bi_error)
++		if (!bi_error)
+ 			drbd_panic_after_delayed_completion_of_aborted_request(device);
+ 	}
+ 
+ 	/* to avoid recursion in __req_mod */
+-	if (unlikely(bio->bi_error)) {
++	if (unlikely(bi_error)) {
+ 		switch (bio_op(bio)) {
+ 		case REQ_OP_DISCARD:
+-			if (bio->bi_error == -EOPNOTSUPP)
++			if (bi_error == -EOPNOTSUPP)
+ 				what = DISCARD_COMPLETED_NOTSUPP;
+ 			else
+ 				what = DISCARD_COMPLETED_WITH_ERROR;
+@@ -270,7 +271,7 @@ void drbd_request_endio(struct bio *bio)
+ 	}
+ 
+ 	bio_put(req->private_bio);
+-	req->private_bio = ERR_PTR(bio->bi_error);
++	req->private_bio = ERR_PTR(bi_error);
+ 
+ 	/* not req_mod(), we need irqsave here! */
+ 	spin_lock_irqsave(&device->resource->req_lock, flags);
+-- 
+1.9.1
