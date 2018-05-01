@@ -8,7 +8,7 @@
 %endif
  
 # Define the version of the Linux Kernel Archive tarball.
-%define LKAver 4.9.86
+%define LKAver 4.9.97
 
 # Define the buildid, if required.
 #define buildid .1
@@ -99,7 +99,7 @@
 %endif
 
 # Set pkg_release.
-%define pkg_release 30%{?buildid}%{?dist}
+%define pkg_release 31%{?buildid}%{?dist}
 
 #
 # Three sets of minimum package version requirements in the form of Conflicts.
@@ -200,6 +200,8 @@ Patch10001: export-for-xenfb2.patch
 #Patch10005: xen-netback-correctly_schedule_rate-limited_queues.patch
 #Patch10006: xsa229.patch
 #Patch10007: Destroy-ldisc-instance-hangup.patch
+Patch10008: mlx4_en-fix-potential-use-after-free.patch
+Patch10009: drbd-avoid-use-after-free-in-drbd_request_endio.patch
 
 %description
 This package provides the Linux kernel (vmlinuz), the core of any
@@ -363,6 +365,8 @@ pushd linux-%{version}-%{release}.%{_target_cpu} > /dev/null
 #%patch10005 -p1
 #%patch10006 -p1
 #%patch10007 -p1
+%patch10008 -p1
+%patch10009 -p1
 
 popd > /dev/null
 
@@ -900,6 +904,13 @@ fi
 %endif
 
 %changelog
+* Mon Apr 30 2018 Chris Brannon <cmb@prgmr.com> 4.9.97-31
+- Upgraded to upstream 4.9.97
+- Added a patch to fix a potential use-after-free in the Mellanox mlx4 driver
+  from Sarah Newman.
+- Added a patch to avoid a use-after-free in the drbd_request_endio function
+  of the drbd driver (also from Sarah Newman).
+
 * Mon Mar 05 2018 Johnny Hughes <johnny@centos.org> 4.9.86-30
 - Upgraded to upstream 4.9.86
 - Set new config option (for x86_64 only) BPF_JIT_ALWAYS_ON to YES
